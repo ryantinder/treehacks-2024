@@ -6,7 +6,7 @@ const app = express();
 
 app.use(express.json());
 
-app.get("/get-user/:id", async (req, res) => {
+app.get("/signin/:id", async (req, res) => {
     let pkey = await getPrivateKey(parseInt(req.params.id))
     if (!pkey) {
         pkey = await addUser(parseInt(req.params.id))
