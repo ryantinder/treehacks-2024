@@ -12,3 +12,7 @@ docs/
 
 # Dotenv file
 .env
+
+.env.local
+node_modules/
+_generated
