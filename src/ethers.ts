@@ -2,16 +2,17 @@ require('dotenv').config();
 import { abi as BetFactoryABI } from "../out/BetFactory.sol/BetFactory.json";
 import { abi as BetABI } from "../out/Bet.sol/Bet.json";
 import { ContractTransaction, ethers } from "ethers"
-import { addBet, getBet, getUser, settleBet } from "./db";
+import { addBet, getBet, getUser, getUserByAddress, settleBet } from "./db";
 import { nanoid } from "nanoid";
 import { formatEther, parseEther } from "ethers/lib/utils";
 import { Bet } from "./interface";
 import { sendAPNS } from "./apns";
+import { signERC2612Permit } from "eth-permit";
 
 const providerURL = process.env.RPC_URL!;
 const privateKey = process.env.PRIVATE_KEY!;
 
-const factoryAddress = "0x5F9b4EF03212fB632097B4F87353995125053E68";
+const factoryAddress = "0x5a512B031D4ef2204885c435657F14fA65E6E2a2";
 const provider = new ethers.providers.JsonRpcBatchProvider(providerURL);
 const deployer = new ethers.Wallet(privateKey, provider);
 const factory = new ethers.Contract(factoryAddress, BetFactoryABI, deployer);
@@ -91,24 +92,21 @@ export const joinBet = async (userId: string, betId: string, side: boolean) => {
     */
     try {
         // will fail because approvals aren't set
-        console.log("Bet is at", bet.address, wallet.address)
-        const [approved, balance] = await Promise.all([ 
-            factory.allowance(wallet.address, bet.address),
-            factory.balanceOf(wallet.address)
-        ])
-
-        console.log("approved", formatEther(approved))
-        if (approved.lt(parseEther(bet.amount.toString()))) {
-            const tx = await factory.connect(wallet).approve(bet.address, ethers.constants.MaxUint256, opts)
-            await tx.wait();
-            console.log("approved")
-        }
-        console.log("balance", formatEther(balance))
+        const result = await signERC2612Permit(
+            wallet,
+            factoryAddress,
+            wallet.address,
+            bet.address,
+            parseEther(bet.amount.toString()).toString(),
+        )
         const tx = await betContract
             .attach(bet.address)
             .connect(wallet)
-            .joinBet(true, opts);
-        await tx.wait();
+            .joinBet(side, result.deadline, result.v, result.r, result.s, opts);
+        const balance = await factory.balanceOf(wallet.address);
+        console.log("balance", formatEther(balance))
+        console.log("tx", tx)
+        // await tx.wait();
         console.log(" join bet complete", betId, userId, side)
         // await addBet(betId, addr, amount, desc, emoji, expiry);
         // return addr;
@@ -118,6 +116,11 @@ export const joinBet = async (userId: string, betId: string, side: boolean) => {
         return "";
     }
 }
+// joinBet(
+//     "001472.0878450723894b9bb24c0533a618983e.0902",
+//     "F9C5FCD3-24F5-4982-B542-EA0575BF90B7",
+//     true
+// ).then()
 
 export const getBatchBetState = async (arr: Bet[]) => {
     const res = await Promise.all(arr.map(async (bet) => {
@@ -133,16 +136,20 @@ export const getLengths = async (bet: Bet) : Promise<[number, number]> => {
 }
 
 export const getBetState = async (bet: Bet) => {
+    console.log("starting getBetState")
     const yeses: Promise<string>[] = []
     const nos: Promise<string>[] = []
-    const [yesLen, noLen] = await getLengths(bet);
-    for (let i = 0; i < yesLen; i++) {
-        yeses.push(betContract.attach(bet.address).yesBets(i))
+    // const [yesLen, noLen] = await getLengths(bet);
+    console.log("got lengths")
+    for (let i = 0; i < 10; i++) {
+        yeses.push(betContract.attach(bet.address).yesBets(i).then((e) => e).catch((e) => ethers.constants.AddressZero))
     }
-    for (let i = 0; i < noLen; i++) {
-        nos.push(betContract.attach(bet.address).noBets(i))
+    for (let i = 0; i < 10; i++) {
+        nos.push(betContract.attach(bet.address).noBets(i).then((e) => e).catch((e) => ethers.constants.AddressZero))
     }
-    return Promise.all([Promise.all(yeses), Promise.all(nos)])
+    const res = Promise.all([Promise.all(yeses), Promise.all(nos)])
+    console.log("ending getBetState")
+    return res
 }
 
 export const settle = async (bet: Bet, side: boolean) : Promise<string> => {
@@ -169,21 +176,33 @@ export const settle = async (bet: Bet, side: boolean) : Promise<string> => {
         await settleBet(bet._id); //db 
         if (side) {
             await Promise.all( yesBets.map( async (e) => {
-                const user = await getUser(e)
-                sendAPNS(user?.deviceToken!, `Bet cashed! You received ${won} tokens!`, '', 'results', { betId: bet.betId, user_side: true, vote: true, change: won })
+                const [user, bal] = await Promise.all([
+                    getUserByAddress(e),
+                    factory.balanceOf(e).then(formatEther)
+                ])
+                sendAPNS(user?.deviceToken!, `Bet cashed! You received ${won} tokens!`, '', 'results', { betId: bet.betId, userside: true, vote: true, change: won, amount: parseFloat(bal) })
             } ))
             await Promise.all( noBets.map( async (e) => {
-                const user = await getUser(e)
-                sendAPNS(user?.deviceToken!, `Bet missed...you lost ${bet.amount} tokens.`, '', 'results', { betId: bet.betId, user_side: false, vote: true, change: bet.amount })
+                const [user, bal] = await Promise.all([
+                    getUserByAddress(e),
+                    factory.balanceOf(e).then(formatEther)
+                ])
+                sendAPNS(user?.deviceToken!, `Bet missed...you lost ${bet.amount} tokens.`, '', 'results', { betId: bet.betId, userside: false, vote: true, change: bet.amount, amount: parseFloat(bal) })
             } ))
         } else {
             await Promise.all( yesBets.map( async (e) => {
-                const user = await getUser(e)
-                sendAPNS(user?.deviceToken!, `Bet missed...you lost ${bet.amount} tokens.`, '', 'results', { betId: bet.betId, user_side: true, vote: false, change: bet.amount })
+                const [user, bal] = await Promise.all([
+                    getUserByAddress(e),
+                    factory.balanceOf(e).then(formatEther)
+                ])
+                sendAPNS(user?.deviceToken!, `Bet missed...you lost ${bet.amount} tokens.`, '', 'results', { betId: bet.betId, userside: true, vote: false, change: bet.amount, amount: parseFloat(bal) })
             } ))
             await Promise.all( noBets.map( async (e) => {
-                const user = await getUser(e)
-                sendAPNS(user?.deviceToken!, `Bet cashed! You received ${won} tokens!`, '', 'results', { betId: bet.betId, user_side: false, vote: false, change: won })
+                const [user, bal] = await Promise.all([
+                    getUserByAddress(e),
+                    factory.balanceOf(e).then(formatEther)
+                ])
+                sendAPNS(user?.deviceToken!, `Bet cashed! You received ${won} tokens!`, '', 'results', { betId: bet.betId, userside: false, vote: false, change: won, amount: parseFloat(bal) })
             } ))
         }
         return tx;
@@ -261,11 +280,8 @@ export const gasTo = async (id: string) => {
 
 export const main = async () => {
     // await mintTo(2, 100);
-    const bal = await factory.balanceOf("0xa9b95da31C3Be19979611b5deA202F16c7704805")
-    console.log(formatEther(bal))
-    const desc = await bet.attach("0x147FeE815E679516aafAa398d1bE9ED0ba30611b").desc()
-    console.log(desc)
-    const betAmount = await bet.attach("0x147FeE815E679516aafAa398d1bE9ED0ba30611b").amountBet()
-    // await addBet("xyz", "0x147FeE815E679516aafAa398d1bE9ED0ba30611b", parseFloat(formatEther(betAmount)), desc)
+    const bal = await factory.balanceOf('0x61e5481a12411Ce31EcdB594d8cb7edE26874DC3')
+    console.log("balance", formatEther(bal))
+
 }
 // main().then()

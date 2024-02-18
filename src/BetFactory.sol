@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
-import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
+import {ERC20Permit, ERC20} from "lib/oz/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {Owned} from "lib/solmate/src/auth/Owned.sol";
 import {SafeTransferLib} from "lib/solmate/src/utils/SafeTransferLib.sol";
 import {CREATE3} from "lib/solmate/src/utils/CREATE3.sol";
@@ -11,14 +11,14 @@ import {Bet} from "./Bet.sol";
  * @author @0xTinder
  * @notice
  */
-contract BetFactory is Owned, ERC20 {
-    using SafeTransferLib for ERC20;
+contract BetFactory is Owned, ERC20, ERC20Permit {
+    using SafeTransferLib for ERC20Permit;
 
-    // address public bet_impl;
-
-    constructor() ERC20("Estimates Token", "ET", 18) Owned(msg.sender) {
-        // bet_impl = address(new Bet());
-    }
+    constructor()
+        ERC20("EstiMates Token", "ET")
+        ERC20Permit("EstiMates Token")
+        Owned(msg.sender)
+    {}
 
     function mint(address to, uint amount) external onlyOwner {
         _mint(to, amount);

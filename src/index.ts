@@ -42,13 +42,13 @@ app.get('/join-bet/:user_id/:bet_id', async (req, res) => {
 })
 
 app.get('/test-settle', async (req, res) => {
-    const bet = await getBet('A46FC92D-AE1B-46BC-B078-B4D7A65475DC')
+    const bet = await getBet("1FB8CE28-D21F-43C8-BA53-523F092CC035")
     await sendAPNS(
         "68c9526cbd9d8665c27c7adac6b3b8cd0fb13a217bb7d3de7e38530fc66d4f3b",
         `Bet cashed! You received ${10} tokens!`,
         '',
         'results', 
-        { betId: bet.betId, user_side: true, vote: true, change: 10 })
+        { betId: bet.betId, userside: true, vote: true, change: 10, amount: 100 })
     res.status(200).send('Success')
 })
 
@@ -91,23 +91,26 @@ app.get("/bets", async (req, res) => {
 })
 app.get("/bets/:id", async (req, res) => {
     // const result = await vote(userId, betId , side );
+    console.log("here")
     const [bets, user] = await Promise.all([getAllBets(), getUser(req.params.id)]);
     if (!user) {
         return res.status(400).json({ "error" : "user not found" })
     }
-    const fullBets = await Promise.all(bets.map(async (bet) : Promise<BetState> => {
-        const [[yeses, nos], votes] = await Promise.all([
+    console.log("there")
+    const fullBets = await Promise.all(
+        bets.map(async (bet) : Promise<BetState> => Promise.all([
             getBetState(bet),
-            getVotesByBetId(bet.betId)
-        ])
-        return {
-            ...bet,
-            yesBets: await Promise.all(yeses),
-            noBets: await Promise.all(nos),
-            votes: votes
-        }
-    }))
+            getVotesByBetId(bet.betId),
+        ]).then(([[yeses, nos], votes]) => {
+            return {
+                ...bet,
+                yesBets: yeses,
+                noBets: nos,
+                votes: votes
+            }
+    })))
     const filteredBets = fullBets.filter((bet) => bet.yesBets.includes(user.address) || bet.noBets.includes(user.address));
+    console.log("bets returning")
     return res.status(200).json({ "bets" : filteredBets })
 })
 

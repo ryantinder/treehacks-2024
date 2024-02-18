@@ -4,6 +4,7 @@ import {Owned} from "lib/solmate/src/auth/Owned.sol";
 import {SafeTransferLib} from "lib/solmate/src/utils/SafeTransferLib.sol";
 import {CREATE3} from "lib/solmate/src/utils/CREATE3.sol";
 import {BetFactory} from "./BetFactory.sol";
+import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
 
 /**
  * @title BetFactory
@@ -11,7 +12,7 @@ import {BetFactory} from "./BetFactory.sol";
  * @notice
  */
 contract Bet {
-    using SafeTransferLib for BetFactory;
+    using SafeTransferLib for ERC20;
     BetFactory public EBT;
     uint public amountBet;
     string public desc;
@@ -20,20 +21,33 @@ contract Bet {
     address[] public noBets;
     mapping(address => bool) public hasBet;
 
-    // bool isInitialized = false;
-
     constructor(uint _amountBet, string memory _desc, address _factory) {
-        // require(!isInitialized, "Already initialized");
         EBT = BetFactory(_factory);
         amountBet = _amountBet;
         desc = _desc;
-        // isInitialized = true;
     }
 
-    function joinBet(bool _side) external {
+    function joinBet(
+        bool _side,
+        uint deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
         require(!hasBet[msg.sender], "Already bet");
         require(EBT.balanceOf(msg.sender) >= amountBet, "Not enough funds");
-        EBT.safeTransferFrom(msg.sender, address(this), amountBet);
+        // EBT.safeTransferFrom(msg.sender, address(this), amountBet);
+        if (r == bytes32(0) && s == bytes32(0) && v == 0) {
+            ERC20(address(EBT)).safeTransferFrom(
+                msg.sender,
+                address(this),
+                amountBet
+            );
+        } else {
+            EBT.permit(msg.sender, address(this), amountBet, deadline, v, r, s);
+            EBT.transferFrom(msg.sender, address(this), amountBet);
+        }
+
         if (_side) {
             yesBets.push(msg.sender);
         } else {
@@ -49,13 +63,13 @@ contract Bet {
             uint length = yesBets.length;
             uint amount = balance / length;
             for (uint i = 0; i < length; i++) {
-                EBT.safeTransfer(yesBets[i], amount);
+                ERC20(address(EBT)).safeTransfer(yesBets[i], amount);
             }
         } else {
             uint length = noBets.length;
             uint amount = balance / length;
             for (uint i = 0; i < noBets.length; i++) {
-                EBT.safeTransfer(noBets[i], amount);
+                ERC20(address(EBT)).safeTransfer(noBets[i], amount);
             }
         }
     }
