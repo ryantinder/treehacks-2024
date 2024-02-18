@@ -17,7 +17,8 @@ export interface BetWithVotes extends Bet {
 
 export interface BetState extends BetWithVotes {
     yesBets: string[],
-    noBets: string[]
+    noBets: string[],
+    balance: number
 }
 
 

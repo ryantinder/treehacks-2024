@@ -1,6 +1,6 @@
 import express from "express";
 import { addUser, getAllBets, getBet, addVote, getVotesByUserId, getUser, updateDeviceToken, getVotesByBetId } from "./db";
-import { createBet, getBetState, joinBet, tokenBalance } from "./ethers";
+import { createBet, getBetState, joinBet, tokenBalance, tokenBalanceAddr } from "./ethers";
 import { sendAPNS } from "./apns";
 import { BetState } from "./interface";
 
@@ -75,16 +75,18 @@ app.get("/bets", async (req, res) => {
     // const result = await vote(userId, betId , side );
     const bets = await getAllBets();
     const fullBets = await Promise.all(bets.map(async (bet) : Promise<BetState> => {
-        const [[yeses, nos], votes] = await Promise.all([
+        const [[yeses, nos], votes, bal] = await Promise.all([
             getBetState(bet),
-            getVotesByBetId(bet.betId)
+            getVotesByBetId(bet.betId),
+            tokenBalanceAddr(bet.address)
         ])
         console.log("here", yeses, nos)
         return {
             ...bet,
-            yesBets: await Promise.all(yeses),
-            noBets: await Promise.all(nos),
-            votes: votes
+            yesBets: yeses,
+            noBets: nos,
+            votes: votes,
+            balance: bal
         }
     }))
     return res.status(200).json({ "bets" : fullBets })
@@ -101,16 +103,18 @@ app.get("/bets/:id", async (req, res) => {
         bets.map(async (bet) : Promise<BetState> => Promise.all([
             getBetState(bet),
             getVotesByBetId(bet.betId),
-        ]).then(([[yeses, nos], votes]) => {
+            tokenBalanceAddr(bet.address)
+        ]).then(([[yeses, nos], votes, bal]) => {
             return {
                 ...bet,
                 yesBets: yeses,
                 noBets: nos,
-                votes: votes
+                votes: votes,
+                balance: bal
             }
     })))
-    const filteredBets = fullBets.filter((bet) => bet.yesBets.includes(user.address) || bet.noBets.includes(user.address));
-    console.log("bets returning")
+    const filteredBets = fullBets.filter((bet) => bet.yesBets.includes(user.address) || bet.noBets.includes(user.address) || bet.creatorId === user.id);
+    console.log("bets returning", filteredBets.length)
     return res.status(200).json({ "bets" : filteredBets })
 })
 
@@ -131,9 +135,13 @@ app.get("/bet/:id", async (req, res) => {
 
 app.get("/get-balance/:id", async (req, res) => {
     try {
+        console.log("getting balance")
         const balance = await tokenBalance(req.params.id);
-        return res.status(200).send(balance)
+        console.log("sending bal", balance)
+        res.header("application/text")
+        return res.status(200).json({balance})
     } catch (e) {
+        console.log("error", e)
         return res.status(400).json({ "error" : e })
     }
 })

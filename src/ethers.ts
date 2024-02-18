@@ -13,10 +13,13 @@ const providerURL = process.env.RPC_URL!;
 const privateKey = process.env.PRIVATE_KEY!;
 
 const factoryAddress = "0x5a512B031D4ef2204885c435657F14fA65E6E2a2";
-const provider = new ethers.providers.JsonRpcBatchProvider(providerURL);
-const deployer = new ethers.Wallet(privateKey, provider);
+const provider1 = new ethers.providers.JsonRpcBatchProvider("https://opt-mainnet.g.alchemy.com/v2/1sjrag8LgSom-6oUNw7AqKpxRl14dPig");
+const provider2 = new ethers.providers.JsonRpcBatchProvider("https://opt-mainnet.g.alchemy.com/v2/qbQlR0HWUXTOGM-ZGtb9v2XFiavC-QDq");
+const provider3 = new ethers.providers.JsonRpcBatchProvider("https://opt-mainnet.g.alchemy.com/v2/1sjrag8LgSom-6oUNw7AqKpxRl14dPig");
+
+const deployer = new ethers.Wallet(privateKey, provider1);
 const factory = new ethers.Contract(factoryAddress, BetFactoryABI, deployer);
-const betContract = new ethers.Contract(factoryAddress, BetABI, provider);
+const betContract = new ethers.Contract(factoryAddress, BetABI, provider3);
 const opts = {
     maxFeePerGas: ethers.utils.parseUnits("0.015", "gwei"),
     maxPriorityFeePerGas: ethers.utils.parseUnits("0.004", "gwei")
@@ -51,11 +54,12 @@ export const createBet = async (userId: string, amount: number, desc: string, be
     */
     try {
         // will fail because approvals aren't set
-        const addr = await factory.getDeployed(salt);
+        const _factory = factory.connect(deployer);
+        const addr = await _factory.getDeployed(salt);
         console.log("Bet will be deployed at:", addr)
         // const res = await factory.callStatic.createBet(user, formattedAmount, side, desc, salt);
         const [tx, _] = await Promise.all([ 
-            factory.connect(deployer).createBet(formattedAmount, desc, salt, opts),
+            _factory.connect(deployer).createBet(formattedAmount, desc, salt, opts),
             addBet(betId, addr, amount, desc, emoji, expiry, userId)
         ])
         await tx.wait();
@@ -80,7 +84,7 @@ export const joinBet = async (userId: string, betId: string, side: boolean) => {
         console.log("problem fetching data in join bet")
         return "";
     }
-    const wallet = new ethers.Wallet(user.key!, provider);
+    const wallet = new ethers.Wallet(user.key!, provider1);
     /*
         function createBet(
             address user,
@@ -129,7 +133,7 @@ export const getBatchBetState = async (arr: Bet[]) => {
 }
 
 export const getLengths = async (bet: Bet) : Promise<[number, number]> => {
-    const [yesBn, noBn] = await betContract.attach(bet.address).lengths();
+    const [yesBn, noBn] = await betContract.connect(provider2).attach(bet.address).lengths();
     const yesLen = yesBn.toNumber();
     const noLen = noBn.toNumber();
     return [yesLen, noLen]
@@ -142,10 +146,10 @@ export const getBetState = async (bet: Bet) => {
     // const [yesLen, noLen] = await getLengths(bet);
     console.log("got lengths")
     for (let i = 0; i < 10; i++) {
-        yeses.push(betContract.attach(bet.address).yesBets(i).then((e) => e).catch((e) => ethers.constants.AddressZero))
+        yeses.push(betContract.connect(provider2).attach(bet.address).yesBets(i).then((e) => e).catch((e) => ethers.constants.AddressZero))
     }
     for (let i = 0; i < 10; i++) {
-        nos.push(betContract.attach(bet.address).noBets(i).then((e) => e).catch((e) => ethers.constants.AddressZero))
+        nos.push(betContract.connect(provider2).attach(bet.address).noBets(i).then((e) => e).catch((e) => ethers.constants.AddressZero))
     }
     const res = Promise.all([Promise.all(yeses), Promise.all(nos)])
     console.log("ending getBetState")
@@ -178,14 +182,14 @@ export const settle = async (bet: Bet, side: boolean) : Promise<string> => {
             await Promise.all( yesBets.map( async (e) => {
                 const [user, bal] = await Promise.all([
                     getUserByAddress(e),
-                    factory.balanceOf(e).then(formatEther)
+                    factory.connect(provider3).balanceOf(e).then(formatEther)
                 ])
                 sendAPNS(user?.deviceToken!, `Bet cashed! You received ${won} tokens!`, '', 'results', { betId: bet.betId, userside: true, vote: true, change: won, amount: parseFloat(bal) })
             } ))
             await Promise.all( noBets.map( async (e) => {
                 const [user, bal] = await Promise.all([
                     getUserByAddress(e),
-                    factory.balanceOf(e).then(formatEther)
+                    factory.connect(provider3).balanceOf(e).then(formatEther)
                 ])
                 sendAPNS(user?.deviceToken!, `Bet missed...you lost ${bet.amount} tokens.`, '', 'results', { betId: bet.betId, userside: false, vote: true, change: bet.amount, amount: parseFloat(bal) })
             } ))
@@ -193,14 +197,14 @@ export const settle = async (bet: Bet, side: boolean) : Promise<string> => {
             await Promise.all( yesBets.map( async (e) => {
                 const [user, bal] = await Promise.all([
                     getUserByAddress(e),
-                    factory.balanceOf(e).then(formatEther)
+                    factory.connect(provider3).balanceOf(e).then(formatEther)
                 ])
                 sendAPNS(user?.deviceToken!, `Bet missed...you lost ${bet.amount} tokens.`, '', 'results', { betId: bet.betId, userside: true, vote: false, change: bet.amount, amount: parseFloat(bal) })
             } ))
             await Promise.all( noBets.map( async (e) => {
                 const [user, bal] = await Promise.all([
                     getUserByAddress(e),
-                    factory.balanceOf(e).then(formatEther)
+                    factory.connect(provider3).balanceOf(e).then(formatEther)
                 ])
                 sendAPNS(user?.deviceToken!, `Bet cashed! You received ${won} tokens!`, '', 'results', { betId: bet.betId, userside: false, vote: false, change: won, amount: parseFloat(bal) })
             } ))
@@ -214,15 +218,21 @@ export const settle = async (bet: Bet, side: boolean) : Promise<string> => {
 }
 
 export const tokenBalance = async (id: string) => {
+    console.log("tokenBalance", id)
     const user = await getUser(id);
     if (!user) {
         console.log("user not found")
         return 0;
     }
-    const [token] = await Promise.all([
-        factory.balanceOf(user.address),
-    ])
-    return formatEther(token);
+    console.log("tokenBalance", user.name, user.address)
+    const bal = await factory.connect(provider3).balanceOf(user.address)
+    console.log(`${user.name} bal:`, formatEther(bal))
+    return parseFloat(formatEther(bal));
+}
+export const tokenBalanceAddr = async (addr: string) => {
+    const token = await factory.connect(provider3).balanceOf(addr)
+    console.log(`${addr} bal:`, formatEther(token))
+    return parseFloat(formatEther(token));
 }
 
 export const mintTo = async (id: string, amount: number) => {
@@ -241,7 +251,7 @@ export const mintTo = async (id: string, amount: number) => {
         */
        console.log("mintTo", user?.name)
        const formattedAmount = ethers.utils.parseEther(amount.toString());
-        const tx = await factory.mint(user.address, formattedAmount, opts);
+        const tx = await factory.connect(deployer).mint(user.address, formattedAmount, opts);
         await tx.wait();
     }
     catch (err) {
