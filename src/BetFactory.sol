@@ -16,6 +16,10 @@ contract BetFactory is Owned, ERC20 {
 
     constructor() ERC20("Estimates Token", "ET", 18) Owned(msg.sender) {}
 
+    function mint(address to, uint amount) external onlyOwner {
+        _mint(to, amount);
+    }
+
     function createBet(
         address user,
         uint amountBet,
@@ -27,7 +31,7 @@ contract BetFactory is Owned, ERC20 {
             salt,
             abi.encodePacked(
                 type(Bet).creationCode,
-                abi.encode(user, amountBet, side, desc)
+                abi.encode(user, amountBet, side, desc, address(this))
             ),
             0
         );

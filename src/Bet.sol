@@ -18,15 +18,16 @@ contract Bet is Owned {
 
     address[] public yesBets;
     address[] public noBets;
-    mapping(address => bool) hasBet;
+    mapping(address => bool) public hasBet;
 
     constructor(
         address _user,
         uint _amountBet,
         bool _side,
-        string memory _desc
+        string memory _desc,
+        address _factory
     ) Owned(_user) {
-        EBT = BetFactory(msg.sender);
+        EBT = BetFactory(_factory);
         amountBet = _amountBet;
         desc = _desc;
         if (_side) {
@@ -34,6 +35,7 @@ contract Bet is Owned {
         } else {
             noBets.push(_user);
         }
+        hasBet[_user] = true;
     }
 
     function joinBet(bool _side) external {
@@ -45,6 +47,7 @@ contract Bet is Owned {
         } else {
             noBets.push(msg.sender);
         }
+        hasBet[msg.sender] = true;
     }
 
     function settleBet(bool _side) external {

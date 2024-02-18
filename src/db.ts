@@ -2,45 +2,73 @@ import { ConvexHttpClient } from "convex/browser"
 import { api } from "../convex/_generated/api.js"
 import { nanoid } from "nanoid";
 import { v4 } from "uuid";
-import { Wallet, ethers, getBytes, keccak256 } from "ethers"
+import { Wallet, ethers } from "ethers"
+import { gasTo, mintTo } from "./ethers.js";
 
 
 const client = new ConvexHttpClient("https://neighborly-zebra-498.convex.cloud")
 
 
-export const getPrivateKey = async (id: number) => {
+export const getPrivateKey = async (id: string) => {
     const res = await client.query(api.keys.get, {id: id})
     return res ? res.key as string : null
 }
 
-export const addUser = async (id: number) => {
-    const [pkey, addr] = await CreateNewAccount(id)
-    await client.mutation(api.keys.create, {id: id, key: pkey, address: addr})
-    return pkey
+export const getUserAddress = async (id: string) => {
+    console.log("getUserAddress", id)
+    const res = await client.query(api.keys.get, {id: id})
+    console.log(res)
+    return res ? res.address as string : null
 }
 
+export const getBet = async (id: string) => {
+    const res = await client.query(api.bets.get, {_id: id})
+    console.log(res)
+    return res ? res.address as string : null
+}
 
+export const getAllBets = async () => {
+    const res = await client.query(api.bets.all, {})
+    return res.map( res => res.address as string)
+}
 
-const CreateNewAccount = async (user_id: number) => {
-    // account creation methodology
-    // sample 3 sources of entropy, username, and timestamp. Hash for private key
-    // const ent1 = v4()
-    // const ent2 = nanoid()
+export const addUser = async (id: string, name: string) => {
+    const addr = await getUserAddress(id)
+    if (!addr) {
+        const wallet = Wallet.createRandom()
+        const address = wallet.address
+        console.log("new account", wallet.privateKey, address)
+    
+        await client.mutation(api.keys.create, {id: id, key: wallet.privateKey, address: wallet.address, name: name})
+        console.log("done with mutation, fund acct")
 
-    // create private key by double hashing
-    // const private_key = keccak256(keccak256(getBytes(ent2 + user_id.toString())))
+        await mintTo(id, 100);
+        await gasTo(id);
+        
 
-    // encrypt private key
-    // const enc_private_key = encrypt(private_key)
-    const wallet = Wallet.createRandom()
-    const address = wallet.address
-    console.log("new account", wallet.privateKey, address)
-    // add account to db
-    // const [_, id] = await Promise.all([
-    //     AddKey(user_id, enc_private_key, address), 
-    //     AddUser(user_id, username, address)
-    // ])
-    return [wallet.privateKey, address]
+    } else {
+        console.log("account alr exists")
+    }
+}
+
+export const addBet = async (betId: string, address: string, amount: number, desc: string) => {
+    const res = await client.mutation(
+        api.bets.add, 
+        {
+            betId, 
+            address, 
+            desc, 
+            createdAt: new Date().toISOString(), 
+            deadline: new Date().toISOString(), 
+            amount: amount, 
+            isSettled: false
+        }
+    )
+    return res
+}
+
+export const settleBet = async (id: string) => {
+    const res = await client.mutation(api.bets.settle, {_id: id as any})
 }
 
 // export const encrypt = (data: string) => {

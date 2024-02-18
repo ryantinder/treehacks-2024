@@ -2,5 +2,11 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+test = "test"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+[rpc_endpoints]
+optimism = 'https://opt-mainnet.g.alchemy.com/v2/dIrUrTiUpJCcLRKhUstpLc5nfhx43Y8w'
+
+[etherscan]
+optimism = { key = "41ISCN2G8ENPIFRC246DCYPH1GX2CWRBSU" }
