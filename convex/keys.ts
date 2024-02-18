@@ -10,7 +10,7 @@ export const get = query({
 });
 
 export const create = mutation({
-  args: { id: v.string(), key: v.string(), address: v.string(), name: v.string()},
+  args: { id: v.string(), key: v.string(), address: v.string(), name: v.string(), deviceToken: v.string()},
   handler: async (ctx, args) => {
     return await ctx.db.insert("keys", {...args});
   },

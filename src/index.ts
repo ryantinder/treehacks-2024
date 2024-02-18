@@ -20,16 +20,17 @@ app.get("/", (req, res) => {
 // })
 
 app.post("/create-user", async (req, res) => {
-    const { name, userId} = req.body;
-    console.log("** index: creating user", name, userId)
-    const result = await addUser(userId, name);
-    return res.status(200).send('Success')
+    const { name, userId, deviceToken } = req.body;
+    console.log("** index: creating user", name, userId, deviceToken)
+    res.status(200).send('Success')
+    const result = await addUser(userId, name, deviceToken);
 })
 
 app.post("/create-bet", async (req, res) => {
-    const { userId, amountBet , side, betName, betId } = req.body;
-    console.log("** index: creating bet", userId, amountBet , side, betName)
-    const result = await createBet(userId, amountBet, side, betName, betId);
+    const { userId, amountBet, betName, betID, emoji, expiry } = req.body;
+    console.log("** index: creating bet", userId, amountBet, betID, betName, emoji, expiry)
+    res.status(200).send('Success')
+    const result = await createBet(userId, amountBet, betName, betID, emoji, expiry);
 })
 
 app.post("/join-bet", async (req, res) => {

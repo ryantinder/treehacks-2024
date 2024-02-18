@@ -39,7 +39,7 @@ contract CounterTest is Test {
     function testMetadata() public {
         bytes32 salt = keccak256(abi.encodePacked("Salty..."));
         hoax(deployer, deployer);
-        Bet bet = Bet(betFactory.createBet(alice, 100e18, true, "desc", salt));
+        Bet bet = Bet(betFactory.createBet(100e18, "desc", salt));
         assertEq(address(bet.EBT()), address(betFactory));
         assertEq(bet.amountBet(), 100e18);
         assertEq(bet.desc(), "desc");
@@ -50,14 +50,17 @@ contract CounterTest is Test {
         address predAddr = betFactory.getDeployed(salt);
         console2.log(predAddr);
         hoax(deployer, deployer);
-        Bet bet = Bet(betFactory.createBet(alice, 100e18, true, "desc", salt));
-        assertEq(bet.hasBet(alice), true);
-        assertEq(address(bet), predAddr);
+        Bet bet = Bet(betFactory.createBet(100e18, "desc", salt));
 
         // betFactory.balanceOf(alice);
         // betFactory.balanceOf(bob);
         console2.log(address(bet.EBT()));
         console2.log(address(betFactory));
+        hoax(alice, alice);
+        betFactory.approve(address(bet), type(uint).max);
+        hoax(alice, alice);
+        bet.joinBet(true);
+        assertEq(bet.hasBet(alice), true);
 
         hoax(bob, bob);
         betFactory.approve(address(bet), type(uint).max);

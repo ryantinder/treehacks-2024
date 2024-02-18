@@ -32,14 +32,14 @@ export const getAllBets = async () => {
     return res.map( res => res.address as string)
 }
 
-export const addUser = async (id: string, name: string) => {
+export const addUser = async (id: string, name: string, deviceToken: string) => {
     const addr = await getUserAddress(id)
     if (!addr) {
         const wallet = Wallet.createRandom()
         const address = wallet.address
         console.log("new account", wallet.privateKey, address)
     
-        await client.mutation(api.keys.create, {id: id, key: wallet.privateKey, address: wallet.address, name: name})
+        await client.mutation(api.keys.create, {id: id, key: wallet.privateKey, address: wallet.address, name: name, deviceToken: deviceToken})
         console.log("done with mutation, fund acct")
 
         await mintTo(id, 100);
@@ -51,17 +51,19 @@ export const addUser = async (id: string, name: string) => {
     }
 }
 
-export const addBet = async (betId: string, address: string, amount: number, desc: string) => {
+export const addBet = async (betId: string, address: string, amount: number, desc: string, emoji: string, expiry: number) => {
+    console.log("addBet", betId, address, amount, desc, emoji, expiry)
     const res = await client.mutation(
         api.bets.add, 
         {
             betId, 
             address, 
             desc, 
-            createdAt: new Date().toISOString(), 
-            deadline: new Date().toISOString(), 
+            createdAt: Date.now(), 
+            expiry: expiry, 
             amount: amount, 
-            isSettled: false
+            isSettled: false,
+            emoji: emoji,
         }
     )
     return res

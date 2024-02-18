@@ -10,7 +10,7 @@ import {BetFactory} from "./BetFactory.sol";
  * @author @0xTinder
  * @notice
  */
-contract Bet is Owned {
+contract Bet {
     using SafeTransferLib for BetFactory;
     BetFactory public EBT;
     uint public amountBet;
@@ -20,22 +20,14 @@ contract Bet is Owned {
     address[] public noBets;
     mapping(address => bool) public hasBet;
 
-    constructor(
-        address _user,
-        uint _amountBet,
-        bool _side,
-        string memory _desc,
-        address _factory
-    ) Owned(_user) {
+    // bool isInitialized = false;
+
+    constructor(uint _amountBet, string memory _desc, address _factory) {
+        // require(!isInitialized, "Already initialized");
         EBT = BetFactory(_factory);
         amountBet = _amountBet;
         desc = _desc;
-        if (_side) {
-            yesBets.push(_user);
-        } else {
-            noBets.push(_user);
-        }
-        hasBet[_user] = true;
+        // isInitialized = true;
     }
 
     function joinBet(bool _side) external {

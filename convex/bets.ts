@@ -23,8 +23,9 @@ export const settle = mutation({
 });
 
 export const add = mutation({
-  args: { betId: v.string(), address: v.string(), desc: v.string(), createdAt: v.string(), deadline: v.string(), amount: v.number(), isSettled: v.boolean()},
+  args: { betId: v.string(), address: v.string(), desc: v.string(), createdAt: v.number(), expiry: v.number(), amount: v.number(), isSettled: v.boolean(), emoji: v.string()},
   handler: async (ctx, args) => {
+    console.log(args)
     return await ctx.db.insert("bets", {...args});
   },
 });

@@ -3,10 +3,12 @@ src = "src"
 out = "out"
 libs = ["lib"]
 test = "test"
+gas_limit = 9223372036854775807
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 [rpc_endpoints]
 optimism = 'https://opt-mainnet.g.alchemy.com/v2/dIrUrTiUpJCcLRKhUstpLc5nfhx43Y8w'
-
+arbitrum = 'https://arb-mainnet.g.alchemy.com/v2/3-P1wyMTnodmv8fa9UeNdJzyxq_hbs0L'
 [etherscan]
 optimism = { key = "41ISCN2G8ENPIFRC246DCYPH1GX2CWRBSU" }
+arbitrum = { key = "5E7276WS4NQGRMMQ43YGVEDN83VQCXAGF5" }

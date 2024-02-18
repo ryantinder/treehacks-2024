@@ -6,10 +6,10 @@ import { addBet, getBet, getPrivateKey, getUserAddress, settleBet } from "./db";
 import { nanoid } from "nanoid";
 import { formatEther } from "ethers/lib/utils";
 
-const providerURL = process.env.OPTIMISM_RPC!;
+const providerURL = process.env.RPC_URL!;
 const privateKey = process.env.PRIVATE_KEY!;
 
-const factoryAddress = "0x04A30E35908B270b18E68Daa64C5e42E028be804";
+const factoryAddress = "0xFD5e73A6804B2370ab9B04202FE3994442B9850b";
 const provider = new ethers.providers.JsonRpcProvider(providerURL);
 const deployer = new ethers.Wallet(privateKey, provider);
 const factory = new ethers.Contract(factoryAddress, BetFactoryABI, deployer);
@@ -27,10 +27,10 @@ const bet = new ethers.Contract(factoryAddress, BetABI, provider);
  * @param desc desc of bet
  * @returns 
  */
-export const createBet = async (userId: string, amount: number, side: boolean, desc: string, betId: string) : Promise<string> => {
+
+export const createBet = async (userId: string, amount: number, desc: string, betId: string, emoji: string, expiry: number) : Promise<string> => {
     // 1. fetch user private key from convex
     console.log("createBet")
-    const user = await getUserAddress(userId);
     const formattedAmount = ethers.utils.parseEther(amount.toString());
     const rand = nanoid()
     const salt = ethers.utils.keccak256(ethers.utils.id(rand));
@@ -46,14 +46,12 @@ export const createBet = async (userId: string, amount: number, side: boolean, d
     try {
         // will fail because approvals aren't set
         const addr = await factory.getDeployed(salt);
-        const balance = await factory.balanceOf(user);
         console.log("Bet will be deployed at:", addr)
-        console.log("User balance:", balance.toString())
         // const res = await factory.callStatic.createBet(user, formattedAmount, side, desc, salt);
-        const tx = await factory.connect(deployer).createBet(user, formattedAmount, side, desc, salt);
+        const tx = await factory.connect(deployer).createBet(formattedAmount, desc, salt);
         await tx.wait();
-        
-        await addBet(betId, addr, amount, desc);
+        console.log(" tx complete", betId, addr, amount, desc, emoji, expiry)
+        await addBet(betId, addr, amount, desc, emoji, expiry);
         return addr;
     }
     catch (err) {
@@ -162,6 +160,6 @@ export const main = async () => {
     const desc = await bet.attach("0x147FeE815E679516aafAa398d1bE9ED0ba30611b").desc()
     console.log(desc)
     const betAmount = await bet.attach("0x147FeE815E679516aafAa398d1bE9ED0ba30611b").amountBet()
-    await addBet("xyz", "0x147FeE815E679516aafAa398d1bE9ED0ba30611b", parseFloat(formatEther(betAmount)), desc)
+    // await addBet("xyz", "0x147FeE815E679516aafAa398d1bE9ED0ba30611b", parseFloat(formatEther(betAmount)), desc)
 }
 // main().then()
