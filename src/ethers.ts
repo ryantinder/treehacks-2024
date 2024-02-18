@@ -1,20 +1,25 @@
 require('dotenv').config();
 import { abi as BetFactoryABI } from "../out/BetFactory.sol/BetFactory.json";
 import { abi as BetABI } from "../out/Bet.sol/Bet.json";
-import { ethers } from "ethers"
-import { addBet, getBet, getPrivateKey, getUserAddress, settleBet } from "./db";
+import { ContractTransaction, ethers } from "ethers"
+import { addBet, getBet, getUser, settleBet } from "./db";
 import { nanoid } from "nanoid";
-import { formatEther } from "ethers/lib/utils";
+import { formatEther, parseEther } from "ethers/lib/utils";
+import { Bet } from "./interface";
+import { sendAPNS } from "./apns";
 
 const providerURL = process.env.RPC_URL!;
 const privateKey = process.env.PRIVATE_KEY!;
 
-const factoryAddress = "0xFD5e73A6804B2370ab9B04202FE3994442B9850b";
-const provider = new ethers.providers.JsonRpcProvider(providerURL);
+const factoryAddress = "0x5F9b4EF03212fB632097B4F87353995125053E68";
+const provider = new ethers.providers.JsonRpcBatchProvider(providerURL);
 const deployer = new ethers.Wallet(privateKey, provider);
 const factory = new ethers.Contract(factoryAddress, BetFactoryABI, deployer);
-const bet = new ethers.Contract(factoryAddress, BetABI, provider);
-
+const betContract = new ethers.Contract(factoryAddress, BetABI, provider);
+const opts = {
+    maxFeePerGas: ethers.utils.parseUnits("0.015", "gwei"),
+    maxPriorityFeePerGas: ethers.utils.parseUnits("0.004", "gwei")
+}
 /*/////////////////////////////////////////
                 Deployer functions
 /////////////////////////////////////////*/
@@ -48,10 +53,12 @@ export const createBet = async (userId: string, amount: number, desc: string, be
         const addr = await factory.getDeployed(salt);
         console.log("Bet will be deployed at:", addr)
         // const res = await factory.callStatic.createBet(user, formattedAmount, side, desc, salt);
-        const tx = await factory.connect(deployer).createBet(formattedAmount, desc, salt);
+        const [tx, _] = await Promise.all([ 
+            factory.connect(deployer).createBet(formattedAmount, desc, salt, opts),
+            addBet(betId, addr, amount, desc, emoji, expiry, userId)
+        ])
         await tx.wait();
         console.log(" tx complete", betId, addr, amount, desc, emoji, expiry)
-        await addBet(betId, addr, amount, desc, emoji, expiry);
         return addr;
     }
     catch (err) {
@@ -60,20 +67,125 @@ export const createBet = async (userId: string, amount: number, desc: string, be
     }
 }
 
-export const settle = async (_id: string, side: boolean) : Promise<string> => {
+
+export const joinBet = async (userId: string, betId: string, side: boolean) => {
     // 1. fetch user private key from convex
-    console.log("settle bet, side:", side)
-    const addr = await getBet(_id);
+    console.log("joinBet")
+    const [bet, user] = await Promise.all([
+        getBet(betId),
+        getUser(userId)
+    ])
+    if (!bet || !user) {
+        console.log("problem fetching data in join bet")
+        return "";
+    }
+    const wallet = new ethers.Wallet(user.key!, provider);
+    /*
+        function createBet(
+            address user,
+            uint amountBet,
+            bool side,
+            string memory desc,
+            bytes32 salt
+        ) external onlyOwner returns (address) {
+    */
+    try {
+        // will fail because approvals aren't set
+        console.log("Bet is at", bet.address, wallet.address)
+        const [approved, balance] = await Promise.all([ 
+            factory.allowance(wallet.address, bet.address),
+            factory.balanceOf(wallet.address)
+        ])
+
+        console.log("approved", formatEther(approved))
+        if (approved.lt(parseEther(bet.amount.toString()))) {
+            const tx = await factory.connect(wallet).approve(bet.address, ethers.constants.MaxUint256, opts)
+            await tx.wait();
+            console.log("approved")
+        }
+        console.log("balance", formatEther(balance))
+        const tx = await betContract
+            .attach(bet.address)
+            .connect(wallet)
+            .joinBet(true, opts);
+        await tx.wait();
+        console.log(" join bet complete", betId, userId, side)
+        // await addBet(betId, addr, amount, desc, emoji, expiry);
+        // return addr;
+    }
+    catch (err) {
+        console.log(err);
+        return "";
+    }
+}
+
+export const getBatchBetState = async (arr: Bet[]) => {
+    const res = await Promise.all(arr.map(async (bet) => {
+        return getBetState(bet);
+    }))
+}
+
+export const getLengths = async (bet: Bet) : Promise<[number, number]> => {
+    const [yesBn, noBn] = await betContract.attach(bet.address).lengths();
+    const yesLen = yesBn.toNumber();
+    const noLen = noBn.toNumber();
+    return [yesLen, noLen]
+}
+
+export const getBetState = async (bet: Bet) => {
+    const yeses: Promise<string>[] = []
+    const nos: Promise<string>[] = []
+    const [yesLen, noLen] = await getLengths(bet);
+    for (let i = 0; i < yesLen; i++) {
+        yeses.push(betContract.attach(bet.address).yesBets(i))
+    }
+    for (let i = 0; i < noLen; i++) {
+        nos.push(betContract.attach(bet.address).noBets(i))
+    }
+    return Promise.all([Promise.all(yeses), Promise.all(nos)])
+}
+
+export const settle = async (bet: Bet, side: boolean) : Promise<string> => {
+    // 1. fetch user private key from convex
+    console.log("** executing settle bet, ", bet.desc, ", side:", side)
     /*
         function settleBet(
             bool _side
         ) external onlyOwner returns (address) {
     */
+    const [[yesBets, noBets], conBal] = await Promise.all([
+        getBetState(bet),
+        factory.balanceOf(bet.address)
+    ])
+    const bal = parseFloat(formatEther(conBal))
+    console.log("contract balance", formatEther(conBal), " expecting to pay")
+    const won = side ? noBets.length * bet.amount / yesBets.length : yesBets.length * bet.amount / noBets.length;
     try {
         // will fail because approvals aren't set
-        const res = await factory.callStatic.settleBet(side);
-        const tx = await factory.settleBet(side);
-        await settleBet(_id); //db 
+        const tx = await betContract
+            .attach(bet.address)
+            .connect(deployer)
+            .settleBet(side, opts);
+        await settleBet(bet._id); //db 
+        if (side) {
+            await Promise.all( yesBets.map( async (e) => {
+                const user = await getUser(e)
+                sendAPNS(user?.deviceToken!, `Bet cashed! You received ${won} tokens!`, '', 'results', { betId: bet.betId, user_side: true, vote: true, change: won })
+            } ))
+            await Promise.all( noBets.map( async (e) => {
+                const user = await getUser(e)
+                sendAPNS(user?.deviceToken!, `Bet missed...you lost ${bet.amount} tokens.`, '', 'results', { betId: bet.betId, user_side: false, vote: true, change: bet.amount })
+            } ))
+        } else {
+            await Promise.all( yesBets.map( async (e) => {
+                const user = await getUser(e)
+                sendAPNS(user?.deviceToken!, `Bet missed...you lost ${bet.amount} tokens.`, '', 'results', { betId: bet.betId, user_side: true, vote: false, change: bet.amount })
+            } ))
+            await Promise.all( noBets.map( async (e) => {
+                const user = await getUser(e)
+                sendAPNS(user?.deviceToken!, `Bet cashed! You received ${won} tokens!`, '', 'results', { betId: bet.betId, user_side: false, vote: false, change: won })
+            } ))
+        }
         return tx;
     }
     catch (err) {
@@ -83,72 +195,66 @@ export const settle = async (_id: string, side: boolean) : Promise<string> => {
 }
 
 export const tokenBalance = async (id: string) => {
-    const user = await getUserAddress(id);
+    const user = await getUser(id);
     if (!user) {
         console.log("user not found")
         return 0;
     }
     const [token] = await Promise.all([
-        factory.balanceOf(user),
+        factory.balanceOf(user.address),
     ])
     return formatEther(token);
 }
 
 export const mintTo = async (id: string, amount: number) => {
     // 1. fetch user private key from convex
-    const user = await getUserAddress(id);
-    console.log("user", user)
-    const formattedAmount = ethers.utils.parseEther(amount.toString());
-    /*
+    const user = await getUser(id);
+    if (!user) {
+        console.log("user not found")
+        return;
+    }
+    try {
+        /*
         function mint(
             address to,
             uint amount,
         ) external onlyOwner {
-    */
-    try {
-        // will fail because approvals aren't set
-        // const tx = await contract.getDeployed.staticCall(salt);
-
-        const tx = await factory.mint(user, formattedAmount);
+        */
+       console.log("mintTo", user?.name)
+       const formattedAmount = ethers.utils.parseEther(amount.toString());
+        const tx = await factory.mint(user.address, formattedAmount, opts);
         await tx.wait();
-        console.log(tx)
-        return tx.hash;
     }
     catch (err) {
         console.log(err);
-        return "";
     }
     
 }
 
 export const gasTo = async (id: string) => {
     // 1. fetch user private key from convex
-    const user = await getUserAddress(id);
+    const user = await getUser(id);
     if (!user) {
         console.log("user not found")
         return "";
     }
-    console.log("user", user)
-    /*
+    try {
+        /*
         function mint(
             address to,
             uint amount,
         ) external onlyOwner {
-    */
-    try {
-        // will fail because approvals aren't set
-        // const tx = await contract.getDeployed.staticCall(salt);
-
+        */
+       console.log("gasTo", user.name)
         const tx = await deployer.sendTransaction({
-            to: user!,
-            value: ethers.utils.parseEther("0.001")
+            to: user.address,
+            value: ethers.utils.parseEther("0.001"),
+            ...opts
         })
         await tx.wait();
-        return tx.hash;
     }
     catch (err) {
         console.log(err);
-        return "";
     }
     
 }

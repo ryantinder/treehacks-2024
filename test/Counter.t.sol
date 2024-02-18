@@ -14,6 +14,8 @@ contract CounterTest is Test {
     address charlie = address(12);
 
     function setUp() public {
+        vm.createSelectFork(vm.envString("RPC_URL"));
+
         hoax(deployer, deployer);
         betFactory = new BetFactory();
         vm.label(address(betFactory), "betFactory");
@@ -30,6 +32,37 @@ contract CounterTest is Test {
         betFactory.transfer(bob, 100e18);
         hoax(deployer, deployer);
         betFactory.transfer(charlie, 100e18);
+    }
+
+    function testBetState() public {
+        bytes32 salt = keccak256(abi.encodePacked("Salty..."));
+        address predAddr = betFactory.getDeployed(salt);
+        console2.log(predAddr);
+        hoax(deployer, deployer);
+        Bet bet = Bet(betFactory.createBet(100e18, "desc", salt));
+
+        // betFactory.balanceOf(alice);
+        // betFactory.balanceOf(bob);
+        console2.log(address(bet.EBT()));
+        console2.log(address(betFactory));
+        hoax(alice, alice);
+        betFactory.approve(address(bet), type(uint).max);
+        hoax(alice, alice);
+        bet.joinBet(true);
+        assertEq(bet.hasBet(alice), true);
+
+        (uint yeses, uint nos) = bet.lengths();
+        assertEq(yeses, 1);
+        assertEq(nos, 0);
+    }
+
+    function testJoinSide() public {
+        Bet bet = Bet(0x8f363F1E8FBCb0c1bF476cba77d258dEDC6Da07A);
+        hoax(
+            0xB638D4Dd88C80f5e2cb5501DdF173A3E02b2a3b5,
+            0xB638D4Dd88C80f5e2cb5501DdF173A3E02b2a3b5
+        );
+        bet.joinBet(true);
     }
 
     function testSanity() public {

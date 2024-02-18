@@ -13,10 +13,10 @@ contract Mint is Script {
         vm.startBroadcast(pkey);
 
         BetFactory factory = BetFactory(
-            0x04A30E35908B270b18E68Daa64C5e42E028be804
+            0x5F9b4EF03212fB632097B4F87353995125053E68
         );
 
-        factory.mint(0xa9b95da31C3Be19979611b5deA202F16c7704805, 100e18);
+        factory.mint(0xda2228a2aA84EC9Ea6a32F898d2dbf8bAbE27a0c, 100e18);
         vm.stopBroadcast();
     }
 }

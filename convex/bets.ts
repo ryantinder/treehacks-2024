@@ -11,7 +11,7 @@ export const all = query({
 export const get = query({
   args: { _id: v.string() },
   handler: async (ctx, {_id}) => {
-    return await ctx.db.query("bets").filter( (q) => q.eq(q.field("_id"), _id)).first();
+    return await ctx.db.query("bets").filter( (q) => q.eq(q.field("betId"), _id)).first();
   },
 });
 
@@ -23,7 +23,7 @@ export const settle = mutation({
 });
 
 export const add = mutation({
-  args: { betId: v.string(), address: v.string(), desc: v.string(), createdAt: v.number(), expiry: v.number(), amount: v.number(), isSettled: v.boolean(), emoji: v.string()},
+  args: { betId: v.string(), address: v.string(), desc: v.string(), createdAt: v.number(), expiry: v.number(), amount: v.number(), isSettled: v.boolean(), emoji: v.string(), creatorId: v.string()},
   handler: async (ctx, args) => {
     console.log(args)
     return await ctx.db.insert("bets", {...args});

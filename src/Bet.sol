@@ -59,4 +59,8 @@ contract Bet {
             }
         }
     }
+
+    function lengths() external view returns (uint, uint) {
+        return (yesBets.length, noBets.length);
+    }
 }
