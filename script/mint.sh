@@ -1,0 +1,1 @@
+forge script script/Mint.s.sol:Mint --rpc-url optimism -vvvv --broadcast
