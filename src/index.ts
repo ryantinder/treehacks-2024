@@ -1,6 +1,6 @@
 import express from "express";
 import { addUser, getAllBets, getBet, addVote, getVotesByUserId, getUser, updateDeviceToken, getVotesByBetId } from "./db";
-import { createBet, getBetState, joinBet, tokenBalance, tokenBalanceAddr } from "./ethers";
+import { createBet, getBetState, joinBet, tokenBalanceUser, tokenBalanceAddr } from "./ethers";
 import { sendAPNS } from "./apns";
 import { BetState } from "./interface";
 
@@ -33,25 +33,6 @@ app.post("/set-side", async (req, res) => {
     const result = await joinBet(userId, betId , side );
 })
 
-app.get('/join-bet/:user_id/:bet_id', async (req, res) => {
-    const { user_id, bet_id } = req.params;
-    res.status(200).send('Success')
-    const [user, bet] = await Promise.all([getUser(user_id), getBet(bet_id)]);
-    const creator = await getUser(bet!.creatorId);
-    const result = await sendAPNS(creator?.deviceToken!, `${user?.name} has joined your bet!`, user?.name!, 'join', {});
-})
-
-app.get('/test-settle', async (req, res) => {
-    const bet = await getBet("1FB8CE28-D21F-43C8-BA53-523F092CC035")
-    await sendAPNS(
-        "68c9526cbd9d8665c27c7adac6b3b8cd0fb13a217bb7d3de7e38530fc66d4f3b",
-        `Bet cashed! You received ${10} tokens!`,
-        '',
-        'results', 
-        { betId: bet.betId, userside: true, vote: true, change: 10, amount: 100 })
-    res.status(200).send('Success')
-})
-
 app.post('/update-device-token', async (req, res) => {
     const { userId, deviceToken } = req.body;
     res.status(200).send('Success')
@@ -64,6 +45,16 @@ app.post("/vote", async (req, res) => {
     res.status(200).send('Success')
     console.log("** index: voting", userId, betId, side)
     const result = await addVote( betId, userId, side );
+})
+/*/////////////////////////////////////////
+                GET
+/////////////////////////////////////////*/
+app.get('/join-bet/:user_id/:bet_id', async (req, res) => {
+    const { user_id, bet_id } = req.params;
+    res.status(200).send('Success')
+    const [user, bet] = await Promise.all([getUser(user_id), getBet(bet_id)]);
+    const creator = await getUser(bet!.creatorId);
+    const result = await sendAPNS(creator?.deviceToken!, `${user?.name} has joined your bet!`, user?.name!, 'join', {});
 })
 
 app.get("/votes/:id", async (req, res) => {
@@ -136,7 +127,7 @@ app.get("/bet/:id", async (req, res) => {
 app.get("/get-balance/:id", async (req, res) => {
     try {
         console.log("getting balance")
-        const balance = await tokenBalance(req.params.id);
+        const balance = await tokenBalanceUser(req.params.id);
         console.log("sending bal", balance)
         res.header("application/text")
         return res.status(200).json({balance})

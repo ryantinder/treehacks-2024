@@ -16,3 +16,4 @@ docs/
 .env.local
 node_modules/
 _generated
+AuthKey

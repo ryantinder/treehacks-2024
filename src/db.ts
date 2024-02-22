@@ -5,7 +5,7 @@ import { gasTo, getLengths, mintTo, settle } from "./ethers.ts";
 import { Bet, BetWithVotes, User, Vote } from "./interface.ts";
 
 
-const client = new ConvexHttpClient("https://neighborly-zebra-498.convex.cloud")
+const client = new ConvexHttpClient(process.env.CONVEX_URL!)
 
 export const getUser = async (id: string) => {
     console.log("getUser", id)
